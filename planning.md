@@ -138,12 +138,18 @@ Write out what a full user interaction looks like from start to finish — tool 
 
 **Step 1:**
 <!-- What does the agent do first? Which tool is called? With what input? -->
+The user describes what outfit they want, and the agent searches through the listings. Must handle event where no listings are found.
 
 **Step 2:**
 <!-- What happens next? What was returned from step 1? What tool is called now? -->
+If a matching listing is found, the agent picks the best result, suggests a new outfit to the user. Must handle a small or empty wardrobe.
 
 **Step 3:**
 <!-- Continue until the full interaction is complete -->
+The agent generates a short description of the outfit that can be shared to other users. Each unique input must yield a unique description.
 
 **Final output to user:**
 <!-- What does the user actually see at the end? -->
+"Faded Band Tee — $22, Depop, Good condition."
+"Pair this with your wide-leg jeans and platform Docs for a classic 90s grunge look. Roll the sleeves once and tuck the front corner slightly for shape."
+"thrifted this faded band tee off depop for $22 and honestly it was made for my wide-legs 🖤 full look in my stories"
