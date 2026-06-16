@@ -20,13 +20,13 @@ Searches the listings dataset and returns matching items.
 
 **Input parameters:**
 <!-- List each parameter, its type, and what it represents -->
-- `description` (str): A description of the user's preferences, requirements, or desired features. This will be used to find the best-matching item from the available listings.
-- `size` (str): The minimum acceptable size of the item. Only items that are equal to or greater than this size will be considered.
+- `description` (str): A description of the user's preferences, requirements, or desired features. This will be used to find the best-matching items from the `listings.json`.
+- `size` (str): The dezired size of the item. Listings must match this size.
 - `max_price` (float): The maximum acceptable price of the item. Only items priced at or below this amount will be considered.
 
 **What it returns:**
 <!-- Describe the return value — what fields does a result contain? -->
-Returns 3 matching item listings sorted by relevance. 
+Returns a list of 3 matching item listings in their dict form sorted by relevance. 
 
 **What happens if it fails or returns nothing:**
 <!-- What should the agent do if no listings match? -->
@@ -51,7 +51,7 @@ Returns the resulting outfit combination using the item specified by the user.
 
 **What happens if it fails or returns nothing:**
 <!-- What should the agent do if the wardrobe is empty or no outfit can be suggested? -->
-Inform the user that if their wardrobe is empty, suggest adding new items, or if no outfit can be suggested, ask them to try another item.
+Inform the user their wardrobe lacks items for outfit generation, and return an outfit using only the included item and general styling advice.
 
 ---
 
@@ -63,7 +63,8 @@ Generates a short, shareable description of a complete outfit. The kind of thing
 
 **Input parameters:**
 <!-- List each parameter, its type, and what it represents -->
-- `outfit` (...): The outfit the description will be based on. The outfit should incorporate items from the user's wardrobe.
+- `outfit` (str): Outfit suggested by `suggest_outfit`.
+- `new_item` (dict): Listing selected from `search_listings`.
 
 **What it returns:**
 <!-- Describe the return value -->
@@ -71,7 +72,7 @@ Returns a description that complements the user's outfit.
 
 **What happens if it fails or returns nothing:**
 <!-- What should the agent do if the outfit data is incomplete? -->
-Inform the user that the outfit data is incomplete and suggest they add more items to their wardrobe before trying again.
+Inform the user that the outfit data is incomplete.
 
 ---
 
@@ -85,7 +86,7 @@ Inform the user that the outfit data is incomplete and suggest they add more ite
 
 **How does your agent decide which tool to call next?**
 <!-- Describe the logic your planning loop uses. What does it look at? What conditions change its behavior? How does it know when it's done? -->
-The agent first calls `search_listings` and searches for matching thrift listings. If an item is found, it calls `suggest_outfit` and attempts to generate outfit recommendations using the user's wardrobe. If outfit generation succeeds, it calls `create_fit_card` and attempts to create a shareable fit card.
+The agent first calls `search_listings` to find matching thrift listings. If results are empty, set an error message in the session and return early. If it returns a list of items, it picks the best result, `result[0]`, calls `suggest_outfit`, and attempts to generate outfit recommendations using the best result and the user's wardrobe. If it returns no outfit, set an error message in the session and return early. If it returns an outfit, it calls `create_fit_card` with the outfit and the user's wardrobe, then attempts to create a shareable fit card. If it returns no fit card, set an error message in the session and return early. If it returns a fit card, display the result to the user.
 
 ---
 
@@ -103,9 +104,9 @@ For each tool, describe the specific failure mode you're handling and what the a
 
 | Tool | Failure mode | Agent response |
 |------|-------------|----------------|
-| search_listings | No results match the query | The agent informs the user that no matching listings were found and suggests changing the search criteria |
-| suggest_outfit | Wardrobe is empty | The agent notifies the user that a complete outfit cannot be generated and suggests trying other items |
-| create_fit_card | Outfit input is missing or incomplete | The agent informs the user that a fit card cannot be created without a complete outfit input and suggests adding more items to their wardrobe |
+| search_listings | No results match the query | Inform the user that no matching listings were found. Suggest changing their search criteria. Stop worflow. |
+| suggest_outfit | Wardrobe is empty | Inform the user that a complete outfit cannot be generated because of limited wardrobe data, and generate basic styling advice. |
+| create_fit_card | Outfit input is missing or incomplete | Inform the user that a fit card cannot be created without a complete outfit input. Stop worflow. |
 
 ---
 
@@ -118,62 +119,32 @@ For each tool, describe the specific failure mode you're handling and what the a
      Show what triggers each tool, how state flows between them, and where error paths branch off.
      ASCII art, a Mermaid diagram (https://mermaid.js.org/syntax/flowchart.html), or an embedded
      sketch are all fine. You'll share this diagram with an AI tool when asking it to implement
-     the planning loop and each individual tool. -->
-User query
+     the planning loop and each individual tool. -->                                    
+User Query
     │
     ▼
-Planning Loop ───────────────────────────────────────────────┐
-    │                                                        |
-    ▼                                             error path returns here
-search_listings(description, size, max_price)                
-    │                                                       
-    ├── results = []                                         
-    │        │                                               
-    │        ▼                                               
-    │   [ERROR] "No listings found"                          
-    │        │                                               
-    │        ▼                                               
-    │     return early                                       
-    │                                                        
-    ├── results = [items...]                                 
-    │        │                                               
-    │        ▼                                               
-    │   Session: selected_item = results[0]                  
-    │        │                                               
-    ▼        |                                               
-suggest_outfit(new_item=selected_item, wardrobe)             
-    │                                                        
-    ├── wardrobe empty / no outfit                           
-    │        │                                               
-    │        ▼                                               
-    │   [ERROR] "Cannot generate outfit"                     
-    │        │                                               
-    │        ▼                                               
-    │     return early                                       
-    │                                                        
-    ├── outfit generated                                     
-    │        │                                               
-    │        ▼                                               
-    │   Session: outfit = result                             
-    │        │                                               
-    ▼        |                                               
-create_fit_card(outfit, selected_item)                       
-    │                                                        
-    ├──► outfit missing / incomplete                          
-    │        │                                               
-    │        ▼                                               
-    │   [ERROR] "Cannot create fit card"                     
-    │        │                                               
-    │        ▼                                               
-    │     return early                                       
-    │                                                        
-    └──► fit card generated                                   
-             │                                               
-             ▼                                               
-        Session: fit_card stored                              
-             │                                               
-             ▼                                                        
-Return final session                                          
+Planning Loop
+    │
+    ▼
+search_listings() -> empty results -> session["error"] -> return
+    │
+    ▼
+session["best_item"]
+    │
+    ▼
+suggest_outfit() -> no outfit -> session["error"] -> return
+    │
+    ▼
+session["outfit_suggestion"]
+    │
+    ▼
+create_fit_card() -> failure -> Session["error"] -> return
+    │
+    ▼
+session["fit_card"]
+    │
+    ▼
+return session
 
 ---
 
@@ -189,7 +160,7 @@ Return final session
      "I'll give Claude my Tool 1 spec (inputs, return value, failure mode) and ask it to implement
      search_listings() using load_listings() from the data loader — then test it against 3 queries
      before trusting it" is a plan. -->
-I will use Claude to implement each tool individually by providing it with the corresponding sections in `planning.md`, including tool description, inputs, outputs, and failure modes, along with any relevant helper code, such as the data loader or agent diagram context. I expect it to produce a clean implementation that adheres to the exact input/output contracts and handles errors as specified. After each tool is generated, I will verify it by running at least 3 test cases to ensure it behaves correctly before moving on to the next tool.
+I will use Claude to implement each tool individually by providing it with the corresponding sections in `planning.md`, including tool description, inputs, outputs, and failure modes, along with any relevant helper code, such as the data loader and agent diagram. For the LLM, Groq (llama-3.3-70b-versatile) will be used. I expect it to produce a clean implementation that adheres to the exact input/output contracts and handles errors as specified. After each tool is generated, I will verify it by running at least 3 test cases to ensure it behaves correctly before moving on to the next tool.
 
 **Milestone 3 — Individual tool implementations:**
 
@@ -205,18 +176,18 @@ Write out what a full user interaction looks like from start to finish — tool 
 
 **Step 1:**
 <!-- What does the agent do first? Which tool is called? With what input? -->
-The user describes what outfit they want, and the agent searches through the listings. Must handle event where no listings are found.
+The user describes what outfit they want, and the agent calls `search_listings` using the user's search criteria.
 
 **Step 2:**
 <!-- What happens next? What was returned from step 1? What tool is called now? -->
-If a matching listing is found, the agent picks the best result, suggests a new outfit to the user. Must handle a small or empty wardrobe.
+If matching listing items from `search_listings` are returned, the agent picks the best result, calls `suggest_outfit` with the best result and the user's wardrobe, and then suggests a new outfit to the user.
 
 **Step 3:**
 <!-- Continue until the full interaction is complete -->
-The agent generates a short description of the outfit that can be shared to other users. Each unique input must yield a unique description.
+If an outfit is returned from `suggest_outfit`, the agent calls `create_fit_card` using the outfit from `suggest_outfit` and the item from the best result from `search_listings` to generate a short description of the outfit.
 
 **Final output to user:**
 <!-- What does the user actually see at the end? -->
 "Faded Band Tee — $22, Depop, Good condition."
 "Pair this with your wide-leg jeans and platform Docs for a classic 90s grunge look. Roll the sleeves once and tuck the front corner slightly for shape."
-"thrifted this faded band tee off depop for $22 and honestly it was made for my wide-legs 🖤 full look in my stories"
+"Thrifted this faded band tee off depop for $22 and honestly it was made for my wide-legs 🖤 full look in my stories"
